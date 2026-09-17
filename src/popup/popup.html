@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>京东评价助手</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>京东评价助手</h1>
+        <p id="status">正在读取任务</p>
+      </header>
+
+      <section id="task" hidden>
+        <div class="task-label">当前商品</div>
+        <div id="product-name" class="product-name"></div>
+        <div id="task-meta" class="task-meta"></div>
+      </section>
+
+      <div class="actions">
+        <button type="button" data-action="OPEN_PENDING_REVIEWS">打开待评价订单</button>
+        <button type="button" data-action="OPEN_TASK_REVIEW" id="open-review" hidden>
+          打开评价详情
+        </button>
+        <button type="button" data-action="OPEN_TASK_PRODUCT" id="open-product" hidden>
+          打开商品评论
+        </button>
+        <button type="button" data-action="CLEAR_TASK" id="clear-task" class="secondary" hidden>
+          清除当前任务
+        </button>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

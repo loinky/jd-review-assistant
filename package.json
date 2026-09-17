@@ -1,0 +1,10 @@
+{
+  "name": "jd-review-assistant",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node scripts/test-review-generator.mjs && node scripts/test-human-delay.mjs && node scripts/test-review-queue.mjs"
+  }
+}

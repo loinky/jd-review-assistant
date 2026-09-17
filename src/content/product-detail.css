@@ -1,0 +1,61 @@
+.jdra-product-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  width: 286px;
+  padding: 14px;
+  border: 1px solid #dedede;
+  border-top: 3px solid #e2231a;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  color: #2d2d2d;
+  font: 13px/1.5 Arial, "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+}
+
+.jdra-product-title {
+  margin-bottom: 6px;
+  color: #b51f18;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.jdra-product-status {
+  min-height: 40px;
+  color: #555;
+}
+
+.jdra-product-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.jdra-product-actions button {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  overflow-wrap: anywhere;
+  border: 1px solid #d8382f;
+  border-radius: 4px;
+  background: #fff;
+  color: #c9271e;
+  font: 12px/1.2 Arial, "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.jdra-product-actions button:hover {
+  background: #fff2f1;
+}
+
+.jdra-product-actions button:disabled {
+  border-color: #c7c7c7;
+  color: #8a8a8a;
+  cursor: default;
+}

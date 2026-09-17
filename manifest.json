@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "京东评价助手",
+  "version": "0.7.0",
+  "description": "从待评价列表自动生成评价、五星评分、上传图片并发表。",
+  "permissions": ["downloads", "storage", "tabs"],
+  "host_permissions": [
+    "https://club.jd.com/*",
+    "https://item.jd.com/*",
+    "https://*.360buyimg.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "京东评价助手",
+    "default_popup": "src/popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://club.jd.com/myJdcomments/myJdcomment.action*"
+      ],
+      "js": ["src/content/order-list.js"],
+      "css": ["src/content/order-list.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://club.jd.com/myJdcomments/orderVoucher.action*"
+      ],
+      "js": [
+        "src/content/review-generator.js",
+        "src/content/review-detail.js"
+      ],
+      "css": ["src/content/review-detail.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://item.jd.com/*"],
+      "js": ["src/content/product-detail.js"],
+      "css": ["src/content/product-detail.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

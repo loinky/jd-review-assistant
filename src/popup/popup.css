@@ -1,0 +1,98 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 330px;
+  margin: 0;
+  background: #f6f6f6;
+  color: #252525;
+}
+
+main {
+  padding: 16px;
+}
+
+header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dedede;
+}
+
+h1 {
+  margin: 0 0 5px;
+  color: #b51f18;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+p {
+  margin: 0;
+  color: #666;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#task {
+  padding: 12px 0;
+  border-bottom: 1px solid #dedede;
+}
+
+.task-label {
+  margin-bottom: 4px;
+  color: #777;
+  font-size: 11px;
+}
+
+.product-name {
+  max-height: 48px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.task-meta {
+  margin-top: 5px;
+  color: #777;
+  font-size: 11px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #d8382f;
+  border-radius: 4px;
+  background: #d8382f;
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #bd2b23;
+}
+
+button.secondary {
+  border-color: #c8c8c8;
+  background: #fff;
+  color: #555;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

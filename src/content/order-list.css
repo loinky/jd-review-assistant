@@ -1,0 +1,56 @@
+.jdra-page-bar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  margin: 0 0 12px;
+  padding: 0 14px;
+  border-left: 3px solid #e2231a;
+  background: #fff7f7;
+  color: #2d2d2d;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.jdra-page-bar strong {
+  color: #b51f18;
+  font-size: 14px;
+}
+
+.jdra-page-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.jdra-page-status {
+  color: #666;
+}
+
+.jdra-page-bar .jdra-action {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 190px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #d8382f;
+  border-radius: 4px;
+  background: #fff;
+  color: #c9271e;
+  font: 13px/1.2 Arial, "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.jdra-page-bar .jdra-action:hover {
+  background: #fff2f1;
+}
+
+.jdra-page-bar .jdra-action:disabled {
+  border-color: #c7c7c7;
+  color: #8a8a8a;
+  cursor: default;
+}
