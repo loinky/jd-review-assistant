@@ -5,6 +5,9 @@
   let autoCaptureCompleted = false;
   let collectInProgress = false;
   let pageObserver = null;
+  let captureStartedAt = null;
+  let captureSignature = "";
+  let captureChangedAt = 0;
 
   const cleanText = (value) => String(value || "").replace(/\s+/g, " ").trim();
 
@@ -31,19 +34,27 @@
       .map((node) => ({
         nickname: cleanText(node.querySelector(".nickname")?.textContent),
         text: cleanText(node.querySelector(".info")?.textContent),
-        imageUrls: [...node.querySelectorAll(".imgs img.img")]
+        imageUrls: [...node.querySelectorAll(".imgs img")]
           .map((image) =>
             normalizeImageUrl(
-              image.currentSrc || image.getAttribute("src") || image.dataset.src,
+              image.dataset.lazyImg || image.dataset.src || image.getAttribute("data-original") || image.currentSrc || image.getAttribute("src"),
             ),
           )
-          .filter(Boolean),
+          .filter((url) => {
+            if (!url) return false;
+            return /(^|\.)360buyimg\.com$/i.test(new URL(url).hostname);
+          }),
       }))
-      .filter((review) => review.text);
+      .filter((review) => review.text || review.imageUrls.length > 0);
 
-    const imageUrls = [
-      ...new Set(reviews.flatMap((review) => review.imageUrls)),
-    ];
+    const interleavedImages = [];
+    const maxImages = Math.max(0, ...reviews.map((review) => review.imageUrls.length));
+    for (let index = 0; index < maxImages; index += 1) {
+      for (const review of reviews) {
+        if (review.imageUrls[index]) interleavedImages.push(review.imageUrls[index]);
+      }
+    }
+    const imageUrls = [...new Set(interleavedImages)];
     const tags = [...root.querySelectorAll(".tags > .item")]
       .map((item) => cleanText(item.textContent))
       .filter(Boolean)
@@ -65,6 +76,8 @@
     const signature = JSON.stringify(context);
     if (signature === lastContextSignature) return;
     lastContextSignature = signature;
+    latestContext = context;
+    renderPanel(context, "读取完成，正在准备上传");
 
     try {
       const response = await chrome.runtime.sendMessage({
@@ -75,7 +88,7 @@
 
       latestContext = context;
       const statusText = response.preparation?.ok
-        ? "评价、五星和图片已自动准备"
+        ? response.preparation.warning || "评价、五星和图片已自动准备"
         : response.preparation?.error || "评论资料已保存";
       renderPanel(context, statusText);
     } catch (error) {
@@ -144,18 +157,39 @@
 
     const status = panel.querySelector(".jdra-product-status");
     if (status) {
-      status.textContent = `${statusText}：${context.reviews.length} 条评论，${context.imageUrls.length} 张图片`;
+      const message = `${statusText}：${context.reviews.length} 条评论，${context.imageUrls.length} 张图片`;
+      if (status.textContent !== message) status.textContent = message;
     }
   }
 
   async function tryCollect() {
     if (autoCaptureCompleted || collectInProgress) return;
-    if (!collectProductContext()) return;
-
     collectInProgress = true;
     try {
       const context = collectProductContext();
-      if (!context) return;
+      if (!context) {
+        renderPanel({ reviews: [], imageUrls: [] }, "正在等待评论区域加载");
+        scheduleCollect();
+        return;
+      }
+      latestContext = context;
+      if (captureStartedAt === null) captureStartedAt = Date.now();
+      const signature = JSON.stringify(context);
+      if (signature !== captureSignature) {
+        captureSignature = signature;
+        captureChangedAt = Date.now();
+      }
+      const ready = context.reviews.length >= 3 &&
+        context.imageUrls.length > 0 && Date.now() - captureChangedAt >= 1000;
+      if (!ready && Date.now() - captureStartedAt < 15000) {
+        const elapsed = Math.floor((Date.now() - captureStartedAt) / 1000);
+        const phase = context.imageUrls.length === 0
+          ? "等待评论图片加载"
+          : context.reviews.length < 3 ? "继续读取更多评论" : "等待评论内容稳定";
+        renderPanel(context, `${phase}（${elapsed}/15 秒）`);
+        scheduleCollect();
+        return;
+      }
       await saveContext(context);
       autoCaptureCompleted = true;
       pageObserver?.disconnect();
@@ -184,8 +218,37 @@
       return;
     }
 
+    window.scrollTo({
+      top: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+      behavior: "instant",
+    });
+
+    let reviewTab = null;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      reviewTab = [...document.querySelectorAll('[role="tab"], a, button, li, span, div')]
+        .find((element) =>
+          element.getClientRects().length > 0 &&
+          /^大家评(?:\s*[（(]?[\d.万千+]+[）)]?)?$/u.test(cleanText(element.textContent)) &&
+          ![...element.children].some((child) => cleanText(child.textContent).startsWith("大家评")),
+        );
+      if (reviewTab) break;
+      renderPanel({ reviews: [], imageUrls: [] }, "正在等待“大家评”标签");
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
+    }
+    if (!reviewTab) {
+      renderPanel({ reviews: [], imageUrls: [] }, "未找到“大家评”标签，请手动打开后点击重新读取");
+      return;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    reviewTab.click();
+
     pageObserver = new MutationObserver(scheduleCollect);
-    pageObserver.observe(document.documentElement, { childList: true, subtree: true });
+    pageObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["src", "srcset", "data-src", "data-lazy-img", "data-original"],
+    });
     void tryCollect();
   }
 

@@ -242,6 +242,15 @@ async function saveProductContext(input, sender) {
 
   await chrome.storage.local.set({ [STORAGE_KEY]: task });
   const preparation = await prepareReviewTab(task);
+  if (preparation?.ok && !preparation.warning &&
+      Number.isInteger(task.productTabId) && task.productTabId === sender.tab?.id &&
+      task.productTabId !== task.reviewTabId) {
+    try {
+      await chrome.tabs.remove(task.productTabId);
+    } catch (error) {
+      console.warn("[京东评价助手] 关闭商品页失败", error.message);
+    }
+  }
   return {
     task,
     counts: { reviews: reviews.length, images: imageUrls.length },
@@ -256,7 +265,17 @@ async function prepareReviewTab(task) {
 
   try {
     await globalThis.JDRAHumanDelay.wait();
-    await chrome.tabs.update(task.reviewTabId, { active: true });
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await chrome.tabs.update(task.reviewTabId, { active: true });
+        break;
+      } catch (error) {
+        if (!/Tabs cannot be edited right now/i.test(error.message) || attempt >= 20) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
     const result = await chrome.tabs.sendMessage(task.reviewTabId, {
       type: "AUTO_PREPARE_REVIEW",
       task,

@@ -3,6 +3,7 @@
   let initialized = false;
   let currentTask = null;
   let autoFlowStarted = false;
+  let preparationPromise = null;
 
   const cleanText = (value) => String(value || "").replace(/\s+/g, " ").trim();
 
@@ -68,7 +69,7 @@
     button.className = "jdra-detail-button";
     button.textContent = product.productUrl
       ? "读取评论并自动发表"
-      : "无图自动评价并发表";
+      : "填写评价（需手动发表）";
     button.addEventListener("click", async () => {
       button.disabled = true;
       button.textContent = "自动处理中";
@@ -139,7 +140,7 @@
     autoFlowStarted = true;
 
     if (!product.productUrl) {
-      updateStatus("该商品没有详情链接，将无图生成评价并自动发表", "working");
+      updateStatus("该商品没有详情链接，填写后需手动发表", "working");
       await prepareReview(currentTask, { tags: [], reviews: [], imageUrls: [] });
       return;
     }
@@ -165,9 +166,7 @@
 
     injectServiceStatusBand();
     for (const star of serviceStars) star.click();
-    updateStatus(`已完成 ${serviceStars.length} 项服务五星，正在发表`, "working");
-    await markTaskPublishing();
-    schedulePublish();
+    updateStatus(`已完成 ${serviceStars.length} 项服务五星，未确认商品图片，请手动发表`, "warning");
     initialized = true;
     return true;
   }
@@ -185,7 +184,20 @@
     return response.task;
   }
 
-  async function prepareReview(task, context) {
+  function prepareReview(task, context) {
+    if (!preparationPromise) {
+      preparationPromise = performPrepareReview(task, context).then((result) => {
+        if (!result.publishScheduled) preparationPromise = null;
+        return result;
+      }).catch((error) => {
+        preparationPromise = null;
+        throw error;
+      });
+    }
+    return preparationPromise;
+  }
+
+  async function performPrepareReview(task, context) {
     const block = findProductBlock(task);
     if (!block) throw new Error("未找到当前商品的评价区域");
 
@@ -205,7 +217,7 @@
           : "没有可上传的评论图片"
         : `已上传 ${uploadResult.uploaded}/${uploadResult.requested} 张图片`;
 
-    const canPublish = task?.autoPublish && !uploadResult.pending;
+    const canPublish = task?.autoPublish && uploadResult.pending === false;
     updateStatus(
       `自动准备完成：评价已填写，${scoreCount} 项五星，${imageSummary}${uploadResult.pending ? "。图片上传未完成，请检查后手动发表" : canPublish ? "，正在发表" : "。请检查后点击发表"}。`,
       uploadResult.warning ? "warning" : "ready",
@@ -286,11 +298,20 @@
   }
 
   async function uploadReviewImages(block, task, context) {
-    const existingCount = getUploadedImageCount(block);
+    const existingCount = Math.min(
+      getUploadedImageCount(block),
+      getRemoteThumbnailCount(block),
+    );
     const availableSlots = Math.max(0, AUTO_UPLOAD_LIMIT - existingCount);
     const imageUrls = [...new Set(context?.imageUrls || [])];
     if (imageUrls.length === 0 || availableSlots === 0) {
-      return { requested: 0, uploaded: 0, existing: existingCount, warning: "" };
+      return {
+        requested: 0,
+        uploaded: 0,
+        existing: existingCount,
+        pending: true,
+        warning: "未执行新的图片上传，已停止自动发表，请检查图片后手动发表",
+      };
     }
 
     const input = block.querySelector(
@@ -301,51 +322,49 @@
         requested: Math.min(imageUrls.length, availableSlots),
         uploaded: 0,
         existing: existingCount,
-        warning: "当前商品没有图片上传入口，已跳过图片上传",
+        pending: true,
+        warning: "当前商品没有图片上传入口，已停止自动发表",
       };
     }
 
-    const files = [];
+    const requestedCount = Math.min(imageUrls.length, availableSlots);
+    let uploaded = 0;
+    let timedOut = false;
     for (const [index, url] of imageUrls.entries()) {
-      if (files.length >= availableSlots) break;
-      const response = await chrome.runtime.sendMessage({
-        type: "FETCH_REVIEW_IMAGE",
-        url,
-      });
+      if (uploaded >= requestedCount) break;
+      updateStatus(`正在读取候选图片 ${index + 1}/${imageUrls.length}，已上传 ${uploaded}/${requestedCount}`, "working");
+      const response = await chrome.runtime.sendMessage({ type: "FETCH_REVIEW_IMAGE", url });
       if (!response?.ok) continue;
-      files.push(dataUrlToFile(response, task, index));
+      const currentInput = block.querySelector('input[type="file"]');
+      if (!currentInput) break;
+      const expectedCount = getUploadedImageCount(block) + 1;
+      const expectedRemoteCount = getRemoteThumbnailCount(block) + 1;
+      const result = await waitForUploadedImageCount(block, expectedCount, expectedRemoteCount, 120000, () => {
+        const transfer = new DataTransfer();
+        transfer.items.add(dataUrlToFile(response, task, index));
+        currentInput.value = "";
+        currentInput.files = transfer.files;
+        currentInput.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      if (result === -1) {
+        updateStatus(`图片 ${index + 1} 上传被拒绝，正在更换下一张`, "warning");
+        continue;
+      }
+      if (result < expectedCount) {
+        timedOut = true;
+        break;
+      }
+      uploaded += 1;
     }
-
-    if (files.length === 0) {
-      return {
-        requested: Math.min(imageUrls.length, availableSlots),
-        uploaded: 0,
-        existing: existingCount,
-        warning: "没有不超过 4MB 的 JPG、PNG、GIF 或 BMP 评论图片，已跳过图片上传",
-      };
-    }
-
-    const existingRemoteCount = getRemoteThumbnailCount(block);
-    const transfer = new DataTransfer();
-    for (const file of files) transfer.items.add(file);
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-
-    const expectedCount = existingCount + files.length;
-    const finalCount = await waitForUploadedImageCount(
-      block,
-      expectedCount,
-      existingRemoteCount + files.length,
-      60000,
-    );
-    const pending = finalCount < expectedCount;
+    const pending = uploaded < requestedCount;
     return {
-      requested: files.length,
-      uploaded: Math.max(0, finalCount - existingCount),
+      requested: requestedCount,
+      uploaded,
       existing: existingCount,
       pending,
-      warning: pending ? "部分图片仍在上传或上传失败，请检查图片区域" : "",
+      warning: pending ? timedOut
+        ? "图片上传超时，已停止自动发表，请检查图片区域"
+        : "候选图片已用完，未能上传足够图片，已停止自动发表" : "",
     };
   }
 
@@ -373,38 +392,55 @@
 
   function getRemoteThumbnailCount(block) {
     return [...block.querySelectorAll(".thumbnail-list img")].filter((image) => {
+      if (image.closest(".thumbnail-error")) return false;
       const source = image.getAttribute("src") || image.currentSrc || "";
       return /^https?:\/\//i.test(source) || /^\/\//.test(source);
     }).length;
   }
 
-  function waitForUploadedImageCount(block, expectedCount, expectedRemoteCount, timeoutMs) {
+  function waitForUploadedImageCount(block, expectedCount, expectedRemoteCount, timeoutMs, startUpload) {
     const uploadedCount = () =>
       getRemoteThumbnailCount(block) >= expectedRemoteCount
         ? getUploadedImageCount(block)
         : Math.min(getUploadedImageCount(block), expectedCount - 1);
-    const currentCount = uploadedCount();
-    if (currentCount >= expectedCount) return Promise.resolve(currentCount);
-
     return new Promise((resolve) => {
-      const observer = new MutationObserver(() => {
+      let readySince = null;
+      const previousErrors = new Set(block.querySelectorAll(".thumbnail-item.thumbnail-error"));
+      const failureObserver = new MutationObserver((records) => {
+        for (const record of records) {
+          if (record.type === "attributes" && record.attributeName === "class" &&
+              !(record.oldValue || "").split(/\s+/).includes("thumbnail-error")) {
+            previousErrors.delete(record.target);
+          }
+        }
+        const failed = [...block.querySelectorAll(".thumbnail-item.thumbnail-error")]
+          .some((element) => !previousErrors.has(element));
+        if (!failed) return;
+        failureObserver.disconnect();
+        window.clearInterval(interval);
+        window.clearTimeout(timer);
+        resolve(-1);
+      });
+      failureObserver.observe(block, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ["class"] });
+      const interval = window.setInterval(() => {
         const count = uploadedCount();
-        if (count < expectedCount) return;
-        observer.disconnect();
+        if (count < expectedCount) {
+          readySince = null;
+          return;
+        }
+        if (readySince === null) readySince = Date.now();
+        if (Date.now() - readySince < 3000) return;
+        failureObserver.disconnect();
+        window.clearInterval(interval);
         window.clearTimeout(timer);
         resolve(count);
-      });
+      }, 250);
       const timer = window.setTimeout(() => {
-        observer.disconnect();
-        resolve(uploadedCount());
+        failureObserver.disconnect();
+        window.clearInterval(interval);
+        resolve(Math.min(uploadedCount(), expectedCount - 1));
       }, timeoutMs);
-      observer.observe(block, {
-        attributes: true,
-        attributeFilter: ["src"],
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
+      startUpload();
     });
   }
 
